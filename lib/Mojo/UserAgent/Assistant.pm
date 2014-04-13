@@ -1,4 +1,4 @@
-package Hadashot::Backend::Queue;
+package Mojo::UserAgent::Assistant;
 use Mojo::Base '-base';
 use Mojo::IOLoop;
 use Mojo::UserAgent;
