@@ -3,6 +3,7 @@ use Mojo::Base '-base';
 use Mojo::IOLoop;
 use Mojo::UserAgent;
 use Mojo::Util 'monkey_patch';
+use Scalar::Util 'weaken';
 
 our $VERSION = '0.01';
 
@@ -33,17 +34,24 @@ for my $name (qw(delete get head options patch post put)) {
 
 sub start {
   my ($self) = @_;
-  unless ($self->timer) {
-    Mojo::IOLoop->start unless (Mojo::IOLoop->is_running);
-    my $id = Mojo::IOLoop->recurring(3 => sub { $self->process(); });
-    $self->timer($id);
-  }
+  return $self if ($self->timer);
+  print STDERR "Starting...\n" if (DEBUG);
+  Mojo::IOLoop->next_tick(
+      sub {
+        my $loop = shift;
+        return unless ($self);
+        $self->process();
+        print STDERR "Setting timer...\n" if (DEBUG);
+        my $id = $loop->recurring(1 => sub { $self->process(); });
+        $self->timer($id);
+      });
   return $self;
 }
 
 sub stop {
   my ($self) = @_;
   if ($self->timer) {
+    print STDERR "Stopping...\n" if (DEBUG);
     Mojo::IOLoop->remove($self->timer);
     $self->timer(undef);
   }
@@ -61,8 +69,7 @@ sub enqueue {
   push @{$self->jobs}, $job;
   print STDERR "\nenqueued request for ", $job->{'url'}, "\n" if (DEBUG);
   }
-  $self->start;
-  return $self; # make chainable?
+  return $self->start;
 }
 
 sub dequeue {
@@ -90,6 +97,12 @@ sub process {
   if ($self->pending == 0 && $self->active == 0) {
     $self->stop(); # the timer shouldn't run STAM.
   }
+}
+
+sub DESTROY {
+  my ($self) = shift;
+  $self->stop();
+  $self->ua(undef); # should trigger Mojo::UserAgent::_cleanup
 }
 
 1;
