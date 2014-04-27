@@ -4,6 +4,7 @@ use Mojo::IOLoop;
 use Mojo::UserAgent;
 use Mojo::Util 'monkey_patch';
 use Scalar::Util 'weaken';
+use Devel::Cycle;
 
 our $VERSION = '0.01';
 
@@ -44,6 +45,7 @@ sub start {
         print STDERR "Setting timer...\n" if (DEBUG);
         my $id = $loop->recurring(1 => sub { $self->process(); });
         $self->timer($id);
+        find_cycle($self);
       });
   return $self;
 }
@@ -92,6 +94,7 @@ sub process {
                      if (DEBUG);
         $cb->($ua, $tx, $data, $self);
         $self->process();
+        find_cycle($self);
       });
   }
   if ($self->pending == 0 && $self->active == 0) {

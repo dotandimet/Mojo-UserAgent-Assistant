@@ -104,6 +104,7 @@ ok time < ($time + 10), 'stopped automatically';
 
 # Non-blocking
 my $ua = Mojo::UserAgent->new(ioloop => Mojo::IOLoop->singleton);
+$uaA = Mojo::UserAgent::Assistant->new(ua => $ua);
 my ($success, $code, $body);
 $ua->get(
   '/' => sub {
