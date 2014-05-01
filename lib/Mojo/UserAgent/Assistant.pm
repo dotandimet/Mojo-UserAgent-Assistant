@@ -33,33 +33,6 @@ for my $name (qw(delete get head options patch post put)) {
   };
 }
 
-sub start {
-  my ($self) = @_;
-  return $self if ($self->timer);
-  print STDERR "Starting...\n" if (DEBUG);
-  Mojo::IOLoop->next_tick(
-      sub {
-        my $loop = shift;
-        return unless ($self);
-        $self->process();
-        print STDERR "Setting timer...\n" if (DEBUG);
-        my $id = $loop->recurring(1 => sub { $self->process(); });
-        $self->timer($id);
-        find_cycle($self);
-      });
-  return $self;
-}
-
-sub stop {
-  my ($self) = @_;
-  if ($self->timer) {
-    print STDERR "Stopping...\n" if (DEBUG);
-    Mojo::IOLoop->remove($self->timer);
-    $self->timer(undef);
-  }
-  return $self;
-}
-
 sub enqueue {
   my $self = shift;
   # validate the job:
@@ -72,6 +45,26 @@ sub enqueue {
   print STDERR "\nenqueued request for ", $job->{'url'}, "\n" if (DEBUG);
   }
   return $self->start;
+}
+
+sub start {
+  my ($self) = @_;
+  return $self if ($self->timer);
+  print STDERR "Starting...\n" if (DEBUG);
+  my $id = Mojo::IOLoop->recurring(0 => sub { $self->process(); });
+  $self->timer($id);
+  find_cycle($self) if (DEBUG);
+  return $self;
+}
+
+sub stop {
+  my ($self) = @_;
+  if ($self->timer) {
+    print STDERR "Stopping...\n" if (DEBUG);
+    Mojo::IOLoop->remove($self->timer);
+    $self->timer(undef);
+  }
+  return $self;
 }
 
 sub dequeue {
@@ -93,8 +86,8 @@ sub process {
                      , " active is now ", $self->active, ", pending is ", $self->pending , "\n"
                      if (DEBUG);
         $cb->($ua, $tx, $data, $self);
+        find_cycle($self) if (DEBUG);
         $self->process();
-        find_cycle($self);
       });
   }
   if ($self->pending == 0 && $self->active == 0) {
