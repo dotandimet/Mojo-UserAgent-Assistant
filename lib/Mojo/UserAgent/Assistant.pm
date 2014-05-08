@@ -3,8 +3,8 @@ use Mojo::Base '-base';
 use Mojo::IOLoop;
 use Mojo::UserAgent;
 use Mojo::Util 'monkey_patch';
-use Scalar::Util 'weaken';
-use Devel::Cycle;
+
+#use Scalar::Util 'weaken';
 
 our $VERSION = '0.01';
 
@@ -15,6 +15,11 @@ has timer => sub { undef };
 has ua => sub { Mojo::UserAgent->new() };
 
 use constant DEBUG => $ENV{HADASHOT_DEBUG} || 0;
+BEGIN {
+  if (DEBUG) {
+    use Devel::Cycle;
+  }
+}
 
 sub pending {
   my $self = shift;
@@ -28,7 +33,8 @@ for my $name (qw(delete get head options patch post put)) {
     my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
     $job->{'cb'} = $cb if ($cb);
     $job->{'url'} = shift;
-    $job->{'headers'} = { @_ } if (scalar @_ > 1 && @_ % 2 == 0);
+    $job->{'headers'} = ( ref $_[0] eq 'HASH' ) ? shift : {};
+    $job->{'args'} = [ @_ ];
     return $self->enqueue($job);
   };
 }
@@ -40,7 +46,7 @@ sub enqueue {
   if ($job && ref $job eq 'HASH') {
     die "enqueue requires a url key in the hashref argument" unless ($job->{'url'} && Mojo::URL->new($job->{'url'}));
     die "enqueue requires a callback (cb key) in the hashref argument" unless ($job->{'cb'} && ref $job->{'cb'} eq 'CODE');
-  # other valid keys: headers, data, method
+  # other valid keys: headers, data, method, args
   push @{$self->jobs}, $job;
   print STDERR "\nenqueued request for ", $job->{'url'}, "\n" if (DEBUG);
   }
@@ -76,10 +82,10 @@ sub process {
   my ($self) = @_;
   # we have jobs and can run them:
   while ($self->active < $self->max and my $job = $self->dequeue) {
-      my ($url, $headers, $cb, $data, $method) = map { $job->{$_} } (qw(url headers cb data method));
+      my ($url, $headers, $cb, $data, $method, $args) = map { $job->{$_} } (qw(url headers cb data method args));
       $method ||= 'get';
       $self->active($self->active+1);
-      $self->ua->$method($url => $headers => sub {
+      $self->ua->$method($url => $headers, @$args => sub {
         my ($ua, $tx) = @_;
         $self->active($self->active-1);
         print STDERR "handled " . $tx->req->url,
@@ -99,6 +105,7 @@ sub DESTROY {
   my ($self) = shift;
   $self->stop();
   $self->ua(undef); # should trigger Mojo::UserAgent::_cleanup
+  $self->jobs(undef);
 }
 
 1;
@@ -117,10 +124,10 @@ Mojo::UserAgent::Assistant - A rate-limiting wrapper for queuing non-blocking ca
   my $uaA = Mojo::UserAgent::Assistant->new();
 
   $uaA->ua->max_redirects(5); # set properties on Assistant's Mojo::UserAgent instance
-  
+
   for my $url (@big_list_of_urls) {
-    $uaA->get($url, 
-           sub { 
+    $uaA->get($url,
+           sub {
             my ($ua, $tx) = @_;
             warn "failed to get $url" unless ($tx->success);
             say "Page at $url is titled: ",
@@ -130,12 +137,12 @@ Mojo::UserAgent::Assistant - A rate-limiting wrapper for queuing non-blocking ca
 
 =head1 DESCRIPTION
 
-L<Mojo::UserAgent::Assistant> is a wrapper implementing a rate-limiting queue 
+L<Mojo::UserAgent::Assistant> is a wrapper implementing a rate-limiting queue
 around L<Mojo::UserAgent>.
 
 While L<Mojo::UserAgent> allows you to to make concurrent, non-blocking HTTP
 requests using Mojo's event loop support, you must take care to limit the number
-of simultaneous requests, because it is still a single process handling all 
+of simultaneous requests, because it is still a single process handling all
 these connections.
 
 Some discussion of this issue is available here
@@ -292,4 +299,3 @@ L<Mojolicious>, L<Mojolicious::Guides>, L<http://mojolicio.us>.
 L<http://blogs.perl.org/users/stas/2013/01/web-scraping-with-modern-perl-part-1.html>, L<http://stackoverflow.com/questions/15152633/perl-mojo-and-json-for-simultaneous-requests>.
 
 =cut
-

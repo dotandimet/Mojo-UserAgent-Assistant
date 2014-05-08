@@ -16,15 +16,14 @@ while (<$fh>) {
     $results{$_} = undef;
     $u->get(
         $_ => sub {
-            my $tx = $_[1];
+            my $tx  = $_[1];
             my $url = $tx->req->url;
             if ( $tx->success ) {
                 $results{$url} = $tx->res->code . ' '
                   . trim $tx->res->dom->find(q{title})->pluck('text')->join('');
             }
             else {
-## Please see file perltidy.ERR
-              $results{$url}   = ":(";
+                $results{$url} = ":(";
             }
             print $url, " ", $results{$url}, "\n";
         }

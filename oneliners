@@ -1,5 +1,0 @@
-perl -Ilib -MMojo::UserAgent::Assistant -E 'my $u =
-Mojo::UserAgent::Assistant->new; $u->ua->max_redirects(5); while (<>) { chomp;
-$u->get($_ => sub { my $tx = $_[1]; if ($tx->success) { say $tx->res->code,
-$tx->res->dom->at(q{title})->text; } else { say ":(" } }); };
-Mojo::IOLoop->start; ' t/sites_from_feeds.txt
