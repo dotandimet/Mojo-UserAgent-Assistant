@@ -231,7 +231,7 @@ is $tx->res->body, 'works!', 'right content';
 
 # Non-blocking form
 ($success, $code, $body) = ();
-$ua->post(
+$uaA->post(
   '/echo' => form => {hello => 'world'} => sub {
     my ($self, $tx) = @_;
     $success = $tx->success;
@@ -247,7 +247,7 @@ is $body,    'hello=world', 'right content';
 
 # Non-blocking JSON
 ($success, $code, $body) = ();
-$ua->post(
+$uaA->post(
   '/echo' => json => {hello => 'world'} => sub {
     my ($self, $tx) = @_;
     $success = $tx->success;

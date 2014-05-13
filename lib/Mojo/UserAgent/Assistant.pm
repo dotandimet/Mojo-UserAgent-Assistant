@@ -4,7 +4,7 @@ use Mojo::IOLoop;
 use Mojo::UserAgent;
 use Mojo::Util 'monkey_patch';
 
-#use Scalar::Util 'weaken';
+use Scalar::Util 'weaken';
 
 our $VERSION = '0.01';
 
@@ -14,7 +14,7 @@ has jobs => sub { [] };
 has timer => sub { undef };
 has ua => sub { Mojo::UserAgent->new() };
 
-use constant DEBUG => $ENV{HADASHOT_DEBUG} || 0;
+use constant DEBUG => $ENV{MUAA_DEBUG} || 0;
 BEGIN {
   if (DEBUG) {
     use Devel::Cycle;
@@ -57,7 +57,9 @@ sub start {
   my ($self) = @_;
   return $self if ($self->timer);
   print STDERR "Starting...\n" if (DEBUG);
-  my $id = Mojo::IOLoop->recurring(0 => sub { $self->process(); });
+  my $this = $self;
+  weaken $this;
+  my $id = Mojo::IOLoop->recurring(0 => sub { $this->process(); });
   $self->timer($id);
   find_cycle($self) if (DEBUG);
   return $self;
@@ -85,17 +87,21 @@ sub process {
       my ($url, $headers, $cb, $data, $method, $args) = map { $job->{$_} } (qw(url headers cb data method args));
       $method ||= 'get';
       $self->active($self->active+1);
-      $self->ua->$method($url => $headers, @$args => sub {
+      unshift @$args, $headers if ($headers);
+      my $this = $self;
+      weaken $this;
+      $self->ua->$method($url => @$args => sub {
         my ($ua, $tx) = @_;
-        $self->active($self->active-1);
+        $this->active($this->active-1);
         print STDERR "handled " . $tx->req->url,
-                     , " active is now ", $self->active, ", pending is ", $self->pending , "\n"
+                     , " active is now ", $this->active, ", pending is ", $this->pending , "\n"
                      if (DEBUG);
-        $cb->($ua, $tx, $data, $self);
-        find_cycle($self) if (DEBUG);
-        $self->process();
+        $cb->($ua, $tx, $data, $this);
+        find_cycle($ua) if (DEBUG);
+        $this->process();
       });
   }
+  find_cycle($self) if (DEBUG);
   if ($self->pending == 0 && $self->active == 0) {
     $self->stop(); # the timer shouldn't run STAM.
   }
