@@ -1,0 +1,12 @@
+CHANGES
+lib/Mojo/UserAgent/Assistant.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+README.md
+t/sites_from_feeds.txt
+t/stress-the-internet-blocking.t
+t/stress-the-internet.t
+t/stress-the-user-agent.t
+t/stress.t
+t/user_agent.t
