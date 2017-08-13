@@ -8,7 +8,9 @@ WriteMakefile(
     VERSION_FROM => 'lib/Mojo/UserAgent/Assistant.pm',
     AUTHOR       => 'Dotan Dimet <dotan@corky.net>',
     PREREQ_PM    => {
-        'Mojolicious' => '4.85',
+        'Mojolicious' => '7.40',
+        'Role::Tiny'  => '2.000001',
+        'Class::Method::Modifiers' => '1.05'
     },
     LICENSE      => 'artistic_2',
     ABSTRACT     => 'Queue non-blocking calls to Mojo::UserAgent',
@@ -21,5 +23,5 @@ WriteMakefile(
     },
     no_index => {directory => ['t']}
   },
-    test => { TESTS => 't/*.t' }
+#    test => { TESTS => 't/*.t' }
 );

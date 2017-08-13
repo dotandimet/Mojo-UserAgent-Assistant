@@ -1,71 +1,53 @@
 package Mojo::UserAgent::Assistant;
+use Role::Tiny;
 use Mojo::Base '-base';
 use Mojo::IOLoop;
-use Mojo::UserAgent;
-use Mojo::Util 'monkey_patch';
 
 use Scalar::Util 'weaken';
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
-has max => sub { $_[0]->ua->max_connections || 4 };
+has max => sub { $_[0]->max_connections || 4 };
 has active => sub { 0 };
 has jobs => sub { [] };
 has timer => sub { undef };
-has ua => sub { Mojo::UserAgent->new() };
 
 use constant DEBUG => $ENV{MUAA_DEBUG} || 0;
+
 BEGIN {
   if (DEBUG) {
     use Devel::Cycle;
   }
 }
 
-sub pending {
-  my $self = shift;
-  return scalar @{$self->jobs};
+around start => sub {
+  my ($orig, $self, $tx, $cb) = @_;
+  die __PACKAGE__ . " does not support blocking requests" unless ($cb && ref $cb eq 'CODE');
+  return $self->enqueue({ tx => $tx, cb => $cb }, $orig);
 };
 
-for my $name (qw(delete get head options patch post put)) {
-  monkey_patch __PACKAGE__, $name, sub {
-    my $self = shift;
-    my $job = { method => $name };
-    my $cb = ref $_[-1] eq 'CODE' ? pop : undef;
-    $job->{'cb'} = $cb if ($cb);
-    $job->{'url'} = shift;
-    $job->{'headers'} = ( ref $_[0] eq 'HASH' ) ? shift : {};
-    $job->{'args'} = [ @_ ];
-    return $self->enqueue($job);
-  };
-}
-
 sub enqueue {
-  my $self = shift;
-  # validate the job:
-  my $job = shift;
-  if ($job && ref $job eq 'HASH') {
-    die "enqueue requires a url key in the hashref argument" unless ($job->{'url'} && Mojo::URL->new($job->{'url'}));
-    die "enqueue requires a callback (cb key) in the hashref argument" unless ($job->{'cb'} && ref $job->{'cb'} eq 'CODE');
-  # other valid keys: headers, data, method, args
+  my ($self, $job, $orig) = @_;
   push @{$self->jobs}, $job;
-  print STDERR "\nenqueued request for ", $job->{'url'}, "\n" if (DEBUG);
-  }
-  return $self->start;
+  print STDERR "\nenqueued request for ", $job->{tx}->req->url, "\n" if (DEBUG);
+  return $self->start_queue($orig);
 }
 
-sub start {
-  my ($self) = @_;
+sub start_queue {
+  my ($self, $original_start) = @_;
   return $self if ($self->timer);
   print STDERR "Starting...\n" if (DEBUG);
   my $this = $self;
   weaken $this;
-  my $id = Mojo::IOLoop->recurring(0 => sub { $this->process(); });
+  my $orig = $original_start;
+  weaken $orig;
+  my $id = Mojo::IOLoop->recurring(0 => sub { $this->process($orig); });
   $self->timer($id);
   find_cycle($self) if (DEBUG);
   return $self;
 }
 
-sub stop {
+sub stop_queue {
   my ($self) = @_;
   if ($self->timer) {
     print STDERR "Stopping...\n" if (DEBUG);
@@ -80,23 +62,30 @@ sub dequeue {
   return shift @{$self->jobs};
 }
 
+sub pending {
+  my $self = shift;
+  return scalar @{$self->jobs};
+};
+
+
 sub process {
-  my ($self) = @_;
+  my ($self, $original_start) = @_;
+  state $start //= $original_start;
   # we have jobs and can run them:
   while ($self->active < $self->max and my $job = $self->dequeue) {
-      my ($url, $headers, $cb, $data, $method, $args) = map { $job->{$_} } (qw(url headers cb data method args));
-      $method ||= 'get';
       $self->active($self->active+1);
-      unshift @$args, $headers if ($headers);
       my $this = $self;
       weaken $this;
-      $self->ua->$method($url => @$args => sub {
+      my ($tx, $cb) = ($job->{tx}, $job->{cb});
+      weaken $tx;
+      weaken $cb;
+      $start->($this, $tx, sub {
         my ($ua, $tx) = @_;
         $this->active($this->active-1);
         print STDERR "handled " . $tx->req->url,
                      , " active is now ", $this->active, ", pending is ", $this->pending , "\n"
                      if (DEBUG);
-        $cb->($ua, $tx, $data, $this);
+        $cb->($ua, $tx);
         find_cycle($ua) if (DEBUG);
         $this->process();
       });
@@ -107,12 +96,11 @@ sub process {
   }
 }
 
-sub DESTROY {
+before DESTROY => sub {
   my ($self) = shift;
-  $self->stop();
-  $self->ua(undef); # should trigger Mojo::UserAgent::_cleanup
+  $self->stop_queue();
   $self->jobs(undef);
-}
+};
 
 1;
 __END__

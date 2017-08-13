@@ -1,14 +1,11 @@
-use Mojo::UserAgent::Assistant;
+use Mojo::UserAgent;
 
 use FindBin;
 use File::Spec;
 
 use Mojo::Util qw(trim);
 
-#my $u = Mojo::UserAgent::Assistant->new;
-#$u->ua->max_redirects(5);
-my $u = Mojo::UserAgent->new;
-$u->max_redirects(5);
+my $u = Mojo::UserAgent->with_roles('Mojo::UserAgent::Assistant')->new(max_redirects => 5);
 sub cb {
         my $tx  = $_[1];
         my $url = $tx->req->url;
